@@ -1,0 +1,8 @@
+build-*
+/test
+uwb2can
+*.o
+*~
+qt/Makefile
+qt/moc_*
+qt/*.pro.user
