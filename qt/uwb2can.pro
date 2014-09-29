@@ -12,7 +12,8 @@ TARGET   = uwb2can
 TEMPLATE = app
 
 SOURCES += main.cpp ../can.cpp ../algorithm.cpp \
-    uwb2can.cpp
+    uwb2can.cpp \
+    server.cpp
 HEADERS += ../can.h \
     uwb2can.h \
     protocol.h
