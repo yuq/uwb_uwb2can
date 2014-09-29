@@ -101,7 +101,7 @@ void UWB2CAN::onRecvUWBData()
     qDebug() << "UWB data here";
 
     QTcpSocket *socket = (QTcpSocket *)sender();
-    if (socket->canReadLine()) {
+    while (socket->canReadLine()) {
         QByteArray data = socket->readLine(128);
         qDebug() << "UWB receive " << data;
 
