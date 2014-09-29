@@ -24,12 +24,18 @@ private slots:
     void onSendCanData(int fd);
     void onRecvUWBData();
     void onNewUWBConnection();
+    void onUWBClientDisconnect();
+    void onNewMonConnection();
+    void onRecvMonData();
+    void onMonClientDisconnect();
 
 private:
     Can mCanNode;
     QSocketNotifier *mCANReadNotifier;
     QSocketNotifier *mCANWriteNotifier;
+    int mUWBClientCount;
     QTcpServer *mUWBServer;
+    QTcpServer *mMonServer;
 
     QQueue<can_frame *> mCanSendQueue;
 
@@ -39,6 +45,7 @@ private:
     double mCurrentPos[3];
     int mUpdated[5];
 
+    bool mLogOn;
     QTime mLogTime;
     QFile mLogFile;
     QTextStream mLogStream;

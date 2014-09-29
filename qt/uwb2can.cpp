@@ -10,17 +10,22 @@ void get_position(double *p1, double *p2, double *p3,
                   double d5, double *r);
 
 UWB2CAN::UWB2CAN(QObject *parent) :
-    QObject(parent), mCanNode("can0", false), mCurrentTimestamp(0),
-    mPoints{{0, 0, 0}, {2, 0, 0}, {0, 2, 0}, {2, 2, 0}, {1, 1, 1}}, mUpdated{0},
-    mLogFile("uwb.log." + QUuid::createUuid().toString())
+    QObject(parent), mCanNode("can0", false),
+    mUWBClientCount(0), mCurrentTimestamp(0),
+    mPoints{{0, 0, 0}, {2, 0, 0}, {0, 2, 0}, {2, 2, 0}, {1, 1, 1}},
+    mUpdated{0}, mLogOn(false)
 {
-    if (!mLogFile.open(QIODevice::WriteOnly)) {
-        qCritical() << "log file open fail";
+    if (mLogOn) {
+        mLogFile.setFileName("uwb.log." + QUuid::createUuid().toString());
+        if (mLogFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            mLogStream.setDevice(&mLogFile);
+            mLogTime.start();
+        }
+        else {
+            qCritical() << "log file open fail";
+            mLogOn = false;
+        }
     }
-
-    mLogStream.setDevice(&mLogFile);
-
-    mLogTime.start();
 
     if (!mCanNode.open_can()) {
         qCritical() << "CAN open fail";
@@ -34,25 +39,61 @@ UWB2CAN::UWB2CAN(QObject *parent) :
     mCANWriteNotifier->setEnabled(false);
     connect(mCANWriteNotifier, SIGNAL(activated(int)), SLOT(onSendCanData(int)));
 
+    // UWB server for target point phone to connect
     mUWBServer = new QTcpServer(this);
-
     connect(mUWBServer, SIGNAL(newConnection()), SLOT(onNewUWBConnection()));
-
     if (!mUWBServer->listen(QHostAddress::Any, 8123)) {
         qCritical() << "UWB server listen fail";
         return;
     }
+
+    // Monitor server for monitor phone to connect
+    mMonServer = new QTcpServer(this);
+    connect(mMonServer, SIGNAL(newConnection()), SLOT(onNewMonConnection()));
+    if (!mMonServer->listen(QHostAddress::Any, 8456)) {
+        qCritical() << "Mon server listen fail";
+        return;
+    }
+
 }
 
 void UWB2CAN::onNewUWBConnection()
 {
-    qDebug() << "new UWB cient connected";
+    qDebug() << "new UWB client connected";
 
     QTcpSocket *socket;
     while ((socket = mUWBServer->nextPendingConnection()) != NULL) {
-        connect(socket, SIGNAL(disconnected()), socket, SLOT(deleteLater()));
+        mUWBClientCount++;
+        connect(socket, SIGNAL(disconnected()), SLOT(onUWBClientDisconnect()));
         connect(socket, SIGNAL(readyRead()), SLOT(onRecvUWBData()));
     }
+}
+
+void UWB2CAN::onUWBClientDisconnect()
+{
+    mUWBClientCount--;
+    sender()->deleteLater();
+}
+
+void UWB2CAN::onNewMonConnection()
+{
+    qDebug() << "new MON client connected";
+
+    QTcpSocket *socket;
+    while ((socket = mMonServer->nextPendingConnection()) != NULL) {
+        connect(socket, SIGNAL(disconnected()), SLOT(onMonClientDisconnect()));
+        connect(socket, SIGNAL(readyRead()), SLOT(onRecvMonData()));
+    }
+}
+
+void UWB2CAN::onMonClientDisconnect()
+{
+    sender()->deleteLater();
+}
+
+void UWB2CAN::onRecvMonData()
+{
+
 }
 
 void UWB2CAN::onRecvUWBData()
@@ -94,8 +135,10 @@ void UWB2CAN::onRecvUWBData()
             return;
         }
 
-        mLogStream << '[' << mLogTime.elapsed() << "][sencor] P" << id + 1
-                   << " time=" << time << " dist=" << dist << endl;
+        if (mLogOn) {
+            mLogStream << '[' << mLogTime.elapsed() << "][sencor] P" << id + 1
+                       << " time=" << time << " dist=" << dist << endl;
+        }
 
         // new round
         if (mCurrentTimestamp < time) {
@@ -138,8 +181,10 @@ void UWB2CAN::computePosition()
     double y = mCurrentPos[1] * 100;
     double z = mCurrentPos[2] * 100;
 
-    mLogStream << '[' << mLogTime.elapsed() << "][compute] x=" << x
-               << " y=" << y << " z=" << z << endl;
+    if (mLogOn) {
+        mLogStream << '[' << mLogTime.elapsed() << "][compute] x=" << x
+                   << " y=" << y << " z=" << z << endl;
+    }
 
     struct can_frame *frame = new can_frame;
     XCMGProtocol::ComputePosition *pack = (XCMGProtocol::ComputePosition *)frame->data;
@@ -210,6 +255,7 @@ void UWB2CAN::onRecvCanData(int fd)
 
 void UWB2CAN::canUpdate(XCMGProtocol::SaveConfig *pack)
 {
+    (void)pack;
     qCritical() << "CAN save config has not been impelemented";
 }
 
@@ -222,8 +268,10 @@ void UWB2CAN::canUpdate(int i, XCMGProtocol::SetPosition *pack)
     mPoints[i][1] = (double)pack->y / 100;
     mPoints[i][2] = (double)pack->z / 100;
 
-    mLogStream << '[' << mLogTime.elapsed() << "][update] P" << i + 1
-               << " x=" << pack->x << " y=" << pack->y << " z=" << pack->z << endl;
+    if (mLogOn) {
+        mLogStream << '[' << mLogTime.elapsed() << "][update] P" << i + 1
+                   << " x=" << pack->x << " y=" << pack->y << " z=" << pack->z << endl;
+    }
 }
 
 void UWB2CAN::onSendCanData(int fd)
