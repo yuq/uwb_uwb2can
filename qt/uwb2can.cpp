@@ -72,6 +72,11 @@ void UWB2CAN::onNewUWBConnection()
 void UWB2CAN::onUWBClientDisconnect()
 {
     mUWBClientCount--;
+    if (!mUWBClientCount) {
+        foreach (QTcpSocket *client, mMonClients) {
+            client->write("[connect] false\n");
+        }
+    }
     sender()->deleteLater();
 }
 
@@ -81,19 +86,20 @@ void UWB2CAN::onNewMonConnection()
 
     QTcpSocket *socket;
     while ((socket = mMonServer->nextPendingConnection()) != NULL) {
+        mMonClients.insert(socket);
+        if (mUWBClientCount)
+            socket->write("[connect] true\n");
+        else
+            socket->write("[connect] false\n");
         connect(socket, SIGNAL(disconnected()), SLOT(onMonClientDisconnect()));
-        connect(socket, SIGNAL(readyRead()), SLOT(onRecvMonData()));
     }
 }
 
 void UWB2CAN::onMonClientDisconnect()
 {
-    sender()->deleteLater();
-}
-
-void UWB2CAN::onRecvMonData()
-{
-
+    QTcpSocket *socket = (QTcpSocket *)sender();
+    mMonClients.remove(socket);
+    socket->deleteLater();
 }
 
 void UWB2CAN::onRecvUWBData()
@@ -184,6 +190,13 @@ void UWB2CAN::computePosition()
     if (mLogOn) {
         mLogStream << '[' << mLogTime.elapsed() << "][compute] x=" << x
                    << " y=" << y << " z=" << z << endl;
+    }
+
+
+    QString mesg;
+    mesg.sprintf("[compute] x=%d y=%d z=%d\n", (int)x, (int)y, (int)z);
+    foreach (QTcpSocket *client, mMonClients) {
+        client->write(mesg.toLatin1());
     }
 
     struct can_frame *frame = new can_frame;

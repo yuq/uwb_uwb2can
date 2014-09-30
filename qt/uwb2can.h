@@ -7,6 +7,7 @@
 #include <QQueue>
 #include <QFile>
 #include <QTime>
+#include <QSet>
 #include <QTextStream>
 #include "../can.h"
 #include "protocol.h"
@@ -26,7 +27,6 @@ private slots:
     void onNewUWBConnection();
     void onUWBClientDisconnect();
     void onNewMonConnection();
-    void onRecvMonData();
     void onMonClientDisconnect();
 
 private:
@@ -49,6 +49,8 @@ private:
     QTime mLogTime;
     QFile mLogFile;
     QTextStream mLogStream;
+
+    QSet<QTcpSocket*> mMonClients;
 
     void computePosition();
     int updatedNum();
