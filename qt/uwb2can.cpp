@@ -67,6 +67,12 @@ void UWB2CAN::onNewUWBConnection()
         connect(socket, SIGNAL(disconnected()), SLOT(onUWBClientDisconnect()));
         connect(socket, SIGNAL(readyRead()), SLOT(onRecvUWBData()));
     }
+
+    if (mUWBClientCount)  {
+        foreach (QTcpSocket *client, mMonClients) {
+            client->write("[connect] true\n");
+        }
+    }
 }
 
 void UWB2CAN::onUWBClientDisconnect()
